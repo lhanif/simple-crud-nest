@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { AppModule } from './../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { AppModule } from '../src/app.module';
 
-describe('App (e2e)', () => {
+describe('E2E API Flow (Auth, Product, Order)', () => {
   let app: INestApplication;
-  let jwtToken: string;
+  let token: string;
+  let productIds: number[] = [];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -14,46 +14,104 @@ describe('App (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
-    const prisma = moduleFixture.get(PrismaService);
-    await prisma.orderItem.deleteMany();
-    await prisma.order.deleteMany();
-    await prisma.product.deleteMany();
-    await prisma.user.deleteMany();
 
-    // Isi data awal untuk test
-    await prisma.product.create({
-      data: {
-        name: 'Sample Product',
-        price: 10000,
-      },
-   });
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+
+    await app.init();
   });
 
-  it('should register a new user', async () => {
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('✅ Register new user', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/register')
       .send({
-        email: 'test2@mail.com',
-        password: '123',
-        name: 'Tester',
+        email: 'testuser@example.com',
+        password: '123456',
+        name: 'Test User',
       })
       .expect(201);
 
     expect(res.body).toHaveProperty('id');
+    expect(res.body.email).toBe('testuser@example.com');
   });
 
-  it('should login and receive JWT token', async () => {
+  it('✅ Login user and get JWT', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/login')
       .send({
-        email: 'test2@mail.com',
-        password: '123',
+        email: 'testuser@example.com',
+        password: '123456',
       })
       .expect(200);
 
-    expect(res.body.access_token).toBeDefined();
-    jwtToken = res.body.access_token;
+    expect(res.body).toHaveProperty('access_token');
+    token = res.body.access_token;
   });
 
+  it('✅ Create first product', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Laptop Lenovo Legion 5',
+        price: 18000000,
+      })
+      .expect(201);
+
+    expect(res.body).toHaveProperty('id');
+    productIds.push(res.body.id);
+  });
+
+  it('✅ Create second product', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Keyboard Mechanical Keychron',
+        price: 1200000,
+      })
+      .expect(201);
+
+    expect(res.body).toHaveProperty('id');
+    productIds.push(res.body.id);
+  });
+
+  it('✅ Get all products', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/products')
+      .expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('✅ Create new order', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/order')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        items: [
+          { productId: productIds[0], quantity: 2 },
+          { productId: productIds[1], quantity: 1 },
+        ],
+      })
+      .expect(201);
+
+    expect(res.body).toHaveProperty('id');
+    expect(res.body.items.length).toBe(2);
+    expect(res.body.total).toBeGreaterThan(0);
+  });
+
+  it('✅ Get all orders', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/order')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+  });
 });

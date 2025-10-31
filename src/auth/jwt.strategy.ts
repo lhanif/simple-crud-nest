@@ -16,7 +16,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    // payload harus mengandung user id
+    console.log('✅ JWT payload diterima:', payload);
     return { id: payload.sub, email: payload.email };
   }
+
 }

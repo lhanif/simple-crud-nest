@@ -1,13 +1,14 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe } from '@nestjs/common';
 import { ProductService } from './product.service';
+import { CreateProductDto } from './dto/create-product.dto';
 
 @Controller('products')
 export class ProductController {
   constructor(private product: ProductService) {}
 
   @Post()
-  create(@Body() body: { name: string; description?: string; price: number; stock?: number }) {
-    return this.product.create(body);
+  create(@Body() createProductDto: CreateProductDto) {
+    return this.product.create(createProductDto);
   }
 
   @Get()
